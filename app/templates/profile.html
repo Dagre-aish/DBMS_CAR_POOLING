@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+
+{% block title %}My Profile • CabShare{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Profile Header Card -->
+    <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950/40 border border-slate-700/80 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-6">
+            <div class="flex items-center space-x-4">
+                <img src="{{ current_user.Profile_Picture or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
+                     alt="Avatar" class="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500/50 shadow-xl">
+                <div>
+                    <h1 class="text-2xl font-extrabold text-white">{{ current_user.Name }}</h1>
+                    <span class="text-xs text-emerald-400 font-semibold flex items-center gap-2">
+                        <span><i class="fa-solid fa-id-badge mr-1"></i>Commuter ID: #{{ current_user.User_ID }}</span>
+                        <span>•</span>
+                        <span>{{ current_user.Gender }}</span>
+                    </span>
+                    <span class="text-xs text-slate-400 block pt-0.5"><i class="fa-solid fa-phone mr-1"></i>{{ current_user.Phone_Number }}</span>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <div class="text-left sm:text-right bg-slate-900/80 px-4 py-3 rounded-2xl border border-slate-700">
+                    <span class="text-xl font-black text-amber-400">⭐ {{ "%.1f"|format(current_user.Average_Rating or 5.0) }}</span>
+                    <span class="block text-[10px] text-slate-400 font-medium">({{ current_user.Total_Reviews or 0 }} Reviews)</span>
+                </div>
+                <div class="text-left sm:text-right bg-slate-900/80 px-5 py-3 rounded-2xl border border-slate-700">
+                    <span class="text-2xl font-black text-emerald-400">₹{{ "%.0f"|format(current_user.Total_Money_Saved or 0) }}</span>
+                    <span class="block text-[11px] text-slate-400 font-medium">Money Saved</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Commuter Stats Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-700/60 text-center">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block">Cab Pools Hosted</span>
+                <span class="text-2xl font-extrabold text-white mt-1 block">{{ rides_hosted|length }}</span>
+            </div>
+
+            <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-700/60 text-center">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block">Cab Splits Joined</span>
+                <span class="text-2xl font-extrabold text-sky-400 mt-1 block">{{ rides_joined|length }}</span>
+            </div>
+
+            <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-700/60 text-center">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block">CO2 Prevented</span>
+                <span class="text-2xl font-extrabold text-emerald-400 mt-1 block">{{ "%.1f"|format(current_user.CO2_Saved_Kg or 0) }} <span class="text-xs font-normal">kg</span></span>
+            </div>
+
+            <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-700/60 text-center">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block">Co-Commuter Friends</span>
+                <span class="text-2xl font-extrabold text-teal-400 mt-1 block">{{ friends_count }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Listings Hosted by User -->
+    <div class="bg-slate-800/80 border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+            <h2 class="text-sm font-bold text-white flex items-center">
+                <i class="fa-solid fa-taxi text-emerald-400 mr-2"></i>My Hosted Cab Pools
+            </h2>
+            <a href="{{ url_for('create_ride') }}" class="text-xs font-bold text-emerald-400 hover:text-emerald-300">
+                + Post New Cab Pool
+            </a>
+        </div>
+
+        {% if rides_hosted %}
+        <div class="space-y-3">
+            {% for r in rides_hosted %}
+            <div class="flex items-center justify-between p-4 bg-slate-900/60 rounded-2xl border border-slate-700/60 hover:border-slate-600 transition">
+                <div class="flex items-center space-x-3">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h3 class="text-xs font-bold text-white">{{ r.Source }} &rarr; {{ r.Destination }}</h3>
+                            <span class="text-[10px] px-2 py-0.5 rounded font-bold
+                                {% if r.Ride_Status == 'Completed' %}bg-purple-500/20 text-purple-300 border border-purple-500/30
+                                {% else %}bg-emerald-500/10 text-emerald-300 border border-emerald-500/30{% endif %}">
+                                {{ r.Ride_Status }}
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-400">
+                            {{ r.Date }} at {{ r.Time }} • {{ r.Available_Seats }} seats vacant • ₹{{ r.Fare_Per_Seat }} / seat
+                        </p>
+                    </div>
+                </div>
+                <a href="{{ url_for('ride_detail', ride_id=r.Ride_ID) }}" class="px-3.5 py-1.5 bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-white rounded-xl text-xs font-bold border border-slate-700 transition">
+                    View Details &rarr;
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    <!-- Commuter Reviews Received -->
+    <div class="bg-slate-800/80 border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+            <h2 class="text-sm font-bold text-white flex items-center">
+                <i class="fa-solid fa-star text-amber-400 mr-2"></i>Reviews Received from Co-Commuters
+            </h2>
+            <span class="text-xs text-slate-400">{{ reviews_received|length }} Total</span>
+        </div>
+
+        {% if reviews_received %}
+        <div class="space-y-3">
+            {% for rev in reviews_received %}
+            <div class="p-4 bg-slate-900/60 rounded-2xl border border-slate-700/60 space-y-2">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <img src="{{ rev.Reviewer_Avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
+                             class="w-8 h-8 rounded-xl object-cover">
+                        <span class="text-xs font-bold text-white">{{ rev.Reviewer_Name }}</span>
+                    </div>
+                    <span class="text-xs text-amber-400 font-bold">
+                        {% for s in range(rev.Rating) %}⭐{% endfor %} ({{ rev.Rating }}/5)
+                    </span>
+                </div>
+                {% if rev.Comment %}
+                <p class="text-xs text-slate-300 italic pl-11">"{{ rev.Comment }}"</p>
+                {% endif %}
+                <span class="text-[10px] text-slate-500 block text-right">{{ rev.Created_At }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-xs text-slate-400 text-center py-4">No reviews received yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

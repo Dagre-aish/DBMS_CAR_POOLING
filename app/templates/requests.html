@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+
+{% block title %}Ride Requests & Approvals • Carpooling DBMS{% endblock %}
+
+{% block content %}
+<div class="space-y-8 max-w-5xl mx-auto">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+            <h1 class="text-2xl font-bold text-white flex items-center">
+                <i class="fa-solid fa-ticket text-emerald-400 mr-3"></i>Ride Requests & Approvals
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Manage incoming booking requests for your hosted rides and view your travel reservations</p>
+        </div>
+        
+        <!-- Live Acting User Indicator -->
+        <div class="p-2.5 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center space-x-2 text-xs">
+            <span class="text-slate-400">Viewing as:</span>
+            <span class="font-bold text-emerald-400">{{ current_user.Name }}</span>
+        </div>
+    </div>
+
+    <!-- Section 1: Incoming Driver Requests (Actionable) -->
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-base font-bold text-white flex items-center">
+                <span class="w-2.5 h-5 bg-emerald-500 rounded-full mr-2"></span>
+                Incoming Booking Requests for My Hosted Rides
+            </h2>
+            <span class="text-xs font-semibold text-slate-400">{{ incoming|length }} Total Received</span>
+        </div>
+
+        {% if incoming %}
+        <div class="space-y-3">
+            {% for req in incoming %}
+            <div class="bg-slate-800/70 border border-slate-700/70 rounded-2xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-600 transition">
+                <div class="flex items-start space-x-4">
+                    <img src="{{ req.Passenger_Avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
+                         alt="Passenger" class="w-11 h-11 rounded-2xl object-cover ring-1 ring-slate-700">
+                    <div class="space-y-1">
+                        <div class="flex items-center space-x-2">
+                            <h3 class="text-sm font-bold text-white">{{ req.Passenger_Name }}</h3>
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300">{{ req.Passenger_Phone }}</span>
+                        </div>
+                        <p class="text-xs text-slate-300 font-medium">
+                            Route: <strong class="text-white">{{ req.Source }} &rarr; {{ req.Destination }}</strong>
+                        </p>
+                        <p class="text-[11px] text-slate-400 flex items-center gap-3">
+                            <span><i class="fa-solid fa-calendar mr-1"></i>{{ req.Date }} at {{ req.Time }}</span>
+                            <span><i class="fa-solid fa-couch mr-1 text-emerald-400"></i>Requested: <strong>{{ req.Seats_Requested }} seat(s)</strong></span>
+                            <span><i class="fa-solid fa-indian-rupee-sign mr-1"></i>Total: <strong>₹{{ "%.2f"|format(req.Seats_Requested * req.Fare_Per_Seat) }}</strong></span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Status & Decision Actions -->
+                <div class="flex items-center space-x-3 self-end md:self-center">
+                    {% if req.Request_Status == 'Pending' %}
+                    <form method="POST" action="{{ url_for('respond_request', request_id=req.Request_ID) }}" class="flex items-center space-x-2">
+                        <button type="submit" name="decision" value="Accepted" 
+                                class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition"
+                                title="Accepts request and triggers Rule #8 auto-seat deduction">
+                            <i class="fa-solid fa-check mr-1"></i>Accept (Rule #8)
+                        </button>
+                        <button type="submit" name="decision" value="Rejected" 
+                                class="px-3 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold rounded-xl text-xs border border-rose-500/40 transition">
+                            <i class="fa-solid fa-xmark mr-1"></i>Decline
+                        </button>
+                    </form>
+                    {% else %}
+                    <span class="px-3 py-1.5 rounded-xl text-xs font-bold
+                        {% if req.Request_Status == 'Accepted' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/30
+                        {% else %}bg-rose-500/10 text-rose-400 border border-rose-500/30{% endif %}">
+                        {{ req.Request_Status }}
+                    </span>
+                    {% if req.Request_Status == 'Accepted' %}
+                    <a href="{{ url_for('chat_view', request_id=req.Request_ID) }}" 
+                       class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow transition flex items-center">
+                        <i class="fa-solid fa-comment-dots mr-1.5"></i>Chat
+                    </a>
+
+                    {% if req.Ride_Status != 'Completed' %}
+                    <form method="POST" action="{{ url_for('complete_ride', ride_id=req.Ride_ID) }}" class="inline">
+                        <button type="submit" onclick="return confirm('Mark ride as completed?')" 
+                                class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow transition flex items-center">
+                            <i class="fa-solid fa-circle-check mr-1"></i>Complete Ride
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    {% if not req.Has_Reviewed %}
+                    <button type="button" onclick="openReviewModal('{{ req.Request_ID }}', '{{ req.Passenger_Name }}')"
+                            class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow transition flex items-center">
+                        <i class="fa-solid fa-star mr-1"></i>Rate Passenger
+                    </button>
+                    {% else %}
+                    <span class="text-[10px] text-amber-400 font-bold px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/30">
+                        <i class="fa-solid fa-star"></i> Reviewed
+                    </span>
+                    {% endif %}
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center bg-slate-800/40 rounded-2xl border border-slate-700/60">
+            <p class="text-xs text-slate-400">No incoming ride requests received yet for rides you created.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Section 2: Outgoing Passenger Bookings -->
+    <div class="space-y-4 pt-4 border-t border-slate-800">
+        <div class="flex items-center justify-between">
+            <h2 class="text-base font-bold text-white flex items-center">
+                <span class="w-2.5 h-5 bg-sky-500 rounded-full mr-2"></span>
+                My Bookings & Ride Requests (Passenger Perspective)
+            </h2>
+            <span class="text-xs font-semibold text-slate-400">{{ my_requests|length }} Total Sent</span>
+        </div>
+
+        {% if my_requests %}
+        <div class="space-y-3">
+            {% for req in my_requests %}
+            <div class="bg-slate-800/70 border border-slate-700/70 rounded-2xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-600 transition">
+                <div class="flex items-start space-x-4">
+                    <img src="{{ req.Driver_Avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
+                         alt="Driver" class="w-11 h-11 rounded-2xl object-cover ring-1 ring-slate-700">
+                    <div class="space-y-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs text-slate-400">Driver:</span>
+                            <h3 class="text-sm font-bold text-white">{{ req.Driver_Name }}</h3>
+                        </div>
+                        <p class="text-xs text-slate-300 font-medium">
+                            {{ req.Source }} &rarr; {{ req.Destination }}
+                        </p>
+                        <p class="text-[11px] text-slate-400 flex items-center gap-3">
+                            <span><i class="fa-solid fa-calendar mr-1"></i>{{ req.Date }} at {{ req.Time }}</span>
+                            <span><i class="fa-solid fa-couch mr-1 text-sky-400"></i>{{ req.Seats_Requested }} seat(s) booked</span>
+                            <span><i class="fa-solid fa-receipt mr-1"></i>Total: ₹{{ "%.2f"|format(req.Seats_Requested * req.Fare_Per_Seat) }}</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-3 self-end md:self-center">
+                    <span class="px-3 py-1.5 rounded-xl text-xs font-bold
+                        {% if req.Request_Status == 'Accepted' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/30
+                        {% elif req.Request_Status == 'Pending' %}bg-amber-500/10 text-amber-400 border border-amber-500/30
+                        {% else %}bg-rose-500/10 text-rose-400 border border-rose-500/30{% endif %}">
+                        {{ req.Request_Status }}
+                    </span>
+
+                    {% if req.Request_Status == 'Accepted' %}
+                    <a href="{{ url_for('chat_view', request_id=req.Request_ID) }}" 
+                       class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow transition flex items-center">
+                        <i class="fa-solid fa-comment-dots mr-1"></i>Chat
+                    </a>
+                    
+                    {% if not req.Has_Reviewed %}
+                    <button type="button" onclick="openReviewModal('{{ req.Request_ID }}', '{{ req.Driver_Name }}')"
+                            class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow transition flex items-center">
+                        <i class="fa-solid fa-star mr-1"></i>Rate
+                    </button>
+                    {% else %}
+                    <span class="text-[10px] text-amber-400 font-bold px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/30">
+                        <i class="fa-solid fa-star"></i> Reviewed
+                    </span>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center bg-slate-800/40 rounded-2xl border border-slate-700/60">
+            <p class="text-xs text-slate-400">You have not submitted any ride booking requests yet.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- Review Modal -->
+<div id="review-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+            <h3 class="text-sm font-bold text-white flex items-center">
+                <i class="fa-solid fa-star text-amber-400 mr-2"></i>Rate & Review Trip
+            </h3>
+            <button onclick="closeReviewModal()" class="text-slate-400 hover:text-white">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form id="review-form" method="POST" action="" class="space-y-4">
+            <div>
+                <p class="text-xs text-slate-300">How was your commute with <strong id="modal-driver-name" class="text-white"></strong>?</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Rating (1 to 5 Stars) *</label>
+                <select name="rating" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-400 font-bold focus:outline-none focus:border-amber-400">
+                    <option value="5" selected>⭐⭐⭐⭐⭐ 5 Stars - Outstanding & Punctual</option>
+                    <option value="4">⭐⭐⭐⭐ 4 Stars - Very Good Commute</option>
+                    <option value="3">⭐⭐⭐ 3 Stars - Average Trip</option>
+                    <option value="2">⭐⭐ 2 Stars - Needs Improvement</option>
+                    <option value="1">⭐ 1 Star - Poor Experience</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Your Feedback & Comments</label>
+                <textarea name="comment" rows="3" placeholder="e.g. Great driving, on-time pickup, polite co-commuter!"
+                          class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"></textarea>
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-2">
+                <button type="button" onclick="closeReviewModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl text-xs font-semibold transition">
+                    Cancel
+                </button>
+                <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow transition">
+                    Submit Review
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openReviewModal(requestId, driverName) {
+        document.getElementById('review-form').action = '/reviews/add/' + requestId;
+        document.getElementById('modal-driver-name').textContent = driverName;
+        const m = document.getElementById('review-modal');
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+    }
+
+    function closeReviewModal() {
+        const m = document.getElementById('review-modal');
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+    }
+
+    // Auto-refresh when ride requests or approvals occur on phone/PC
+    window.addEventListener('firebase-live-event', function(e) {
+        const data = e.detail;
+        if (data && (data.event === 'request_created' || data.event === 'request_responded')) {
+            console.log('⚡ Firebase live update received on requests page! Refreshing...');
+            location.reload();
+        }
+    });
+</script>
+{% endblock %}

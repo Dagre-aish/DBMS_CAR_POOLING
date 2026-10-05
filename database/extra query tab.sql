@@ -1,0 +1,8 @@
+SHOW COLUMNS FROM NOTIFICATION;
+
+USE carpooling_db;
+
+SELECT * FROM NOTIFICATION;
+
+USE carpooling_db;
+

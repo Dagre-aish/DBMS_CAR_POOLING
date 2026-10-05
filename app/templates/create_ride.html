@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+
+{% block title %}Post a Cab-Share / Commute Pool • CabShare{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+
+    <!-- Page Header -->
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+            <h1 class="text-2xl font-bold text-white flex items-center">
+                <i class="fa-solid fa-taxi text-emerald-400 mr-3"></i>Post a Cab-Share / Commute Route
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Add multiple pickup/drop waypoints so co-commuters traveling along your route can split cab fares with you</p>
+        </div>
+        <a href="{{ url_for('rides_list') }}" class="text-xs font-semibold text-slate-400 hover:text-white transition">
+            &larr; Back to Rides
+        </a>
+    </div>
+
+    <!-- Quick Preset Corridor Buttons -->
+    <div class="bg-slate-800/60 p-4 rounded-2xl border border-slate-700/60 space-y-2">
+        <span class="text-xs font-bold text-slate-300 flex items-center">
+            <i class="fa-solid fa-bolt text-amber-400 mr-1.5"></i>Quick-Load Popular Transit Corridors:
+        </span>
+        <div class="flex flex-wrap gap-2">
+            <button type="button" id="load-dadar-ulhasnagar" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition">
+                📍 Dadar ➔ Ulhasnagar (via Kurla, Mulund, Thane, Kalyan)
+            </button>
+            <button type="button" id="load-bandra-bkc" class="px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 rounded-xl text-xs font-semibold transition">
+                📍 Bandra ➔ BKC (via Kalanagar, ICICI Tower)
+            </button>
+        </div>
+    </div>
+
+    <!-- Create Ride Form -->
+    <form method="POST" action="{{ url_for('create_ride') }}" class="bg-slate-800/80 border border-slate-700/80 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+        
+        <!-- Acting Commuter Notice -->
+        <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center space-x-3 text-xs text-emerald-300">
+            <img src="{{ current_user.Profile_Picture }}" class="w-8 h-8 rounded-lg object-cover">
+            <div>
+                <span class="font-bold">Posting as:</span> {{ current_user.Name }} (Commuter ID: {{ current_user.User_ID }})
+            </div>
+        </div>
+
+        <!-- Section 1: Route Endpoints -->
+        <div class="space-y-4">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center">
+                <i class="fa-solid fa-map-location-dot text-emerald-400 mr-2"></i>1. Cab Journey Endpoints
+            </h3>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Starting Pickup Spot *</label>
+                    <input type="text" id="route-source" name="source" required placeholder="e.g. Dadar, Mumbai"
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Final Drop-off Destination *</label>
+                    <input type="text" id="route-destination" name="destination" required placeholder="e.g. Ulhasnagar, Thane District"
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 2: Cab Fare Splitting & Schedule -->
+        <div class="space-y-4 pt-4 border-t border-slate-700/60">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center">
+                <i class="fa-solid fa-calculator text-sky-400 mr-2"></i>2. Schedule, Vehicle & Cab Fare Split
+            </h3>
+
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Travel Date *</label>
+                    <input type="date" name="date" required value="2026-08-28"
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Departure Time *</label>
+                    <input type="time" name="time" required value="08:30"
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Vehicle Type</label>
+                    <input type="text" name="vehicle_info" value="Uber XL / Ola Prime" placeholder="e.g. Uber Premier"
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Est. Distance (Km)</label>
+                    <input type="number" step="0.5" name="distance_km" value="28.5"
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+            </div>
+
+            <!-- Women-Only Pool Toggle -->
+            <div class="p-3.5 rounded-2xl bg-pink-950/30 border border-pink-500/40 flex items-center justify-between">
+                <div class="space-y-0.5">
+                    <label for="women-only-toggle" class="text-xs font-bold text-pink-300 flex items-center cursor-pointer">
+                        <i class="fa-solid fa-person-dress mr-1.5 text-pink-400"></i>🌸 Women-Only Cab Pool (Female Commuters Only)
+                    </label>
+                    <p class="text-[11px] text-slate-400">Only verified female commuters will be permitted to search and request seats.</p>
+                </div>
+                <input type="checkbox" id="women-only-toggle" name="is_women_only" value="1" 
+                       class="w-5 h-5 accent-pink-500 rounded cursor-pointer">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Available Seats for Co-Riders *</label>
+                    <input type="number" id="seats-input" name="total_seats" min="1" max="6" value="3" required
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Total Cab Fare (₹) *</label>
+                    <input type="number" id="total-cab-fare" name="total_cab_fare" step="10" min="50" value="880" required
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Full Route Fare / Seat (₹) *</label>
+                    <input type="number" id="fare-per-seat" name="fare_per_seat" step="5" min="20" value="220" required
+                           class="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: Dynamic Multiple Intermediate Waypoints (Rule #6) -->
+        <div class="space-y-4 pt-4 border-t border-slate-700/60">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center">
+                        <i class="fa-solid fa-signs-post text-teal-400 mr-2"></i>3. Multiple Intermediate Waypoints (Rule #6)
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Enables en-route commuters to hop on or drop off along the highway</p>
+                </div>
+                <button type="button" id="add-stop-btn" 
+                        class="px-3 py-1.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-bold transition">
+                    <i class="fa-solid fa-plus mr-1"></i>Add Waypoint
+                </button>
+            </div>
+
+            <div id="stops-container" class="space-y-3">
+                <!-- Initial default waypoints -->
+                <div class="stop-row flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900/60 p-3 rounded-2xl border border-slate-700/60">
+                    <div class="flex items-center space-x-2 flex-1">
+                        <span class="stop-badge w-6 h-6 rounded-full bg-slate-800 text-teal-400 text-[11px] font-bold flex items-center justify-center">1</span>
+                        <input type="text" name="stop_name[]" value="Kurla Signal" placeholder="Waypoint Name (e.g. Kurla Signal)" required
+                               class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-400">
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="time" name="stop_time[]" value="08:50"
+                               class="w-28 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" name="stop_fare[]" value="60" placeholder="Sub-Fare (₹)"
+                               class="w-24 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400">
+                        <button type="button" class="remove-stop-btn text-rose-400 hover:text-rose-300 p-2 text-xs">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="stop-row flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900/60 p-3 rounded-2xl border border-slate-700/60">
+                    <div class="flex items-center space-x-2 flex-1">
+                        <span class="stop-badge w-6 h-6 rounded-full bg-slate-800 text-teal-400 text-[11px] font-bold flex items-center justify-center">2</span>
+                        <input type="text" name="stop_name[]" value="Thane Teen Hath Naka" placeholder="Waypoint Name (e.g. Thane)" required
+                               class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-400">
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="time" name="stop_time[]" value="09:40"
+                               class="w-28 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" name="stop_fare[]" value="160" placeholder="Sub-Fare (₹)"
+                               class="w-24 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400">
+                        <button type="button" class="remove-stop-btn text-rose-400 hover:text-rose-300 p-2 text-xs">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="pt-6 border-t border-slate-700/60 flex items-center justify-end space-x-3">
+            <a href="{{ url_for('rides_list') }}" class="px-5 py-2.5 rounded-xl text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-300 transition">
+                Cancel
+            </a>
+            <button type="submit" class="px-6 py-2.5 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950 shadow-lg shadow-emerald-500/20 transition">
+                <i class="fa-solid fa-taxi mr-1.5"></i>Publish Cab-Share Route
+            </button>
+        </div>
+
+    </form>
+
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const container = document.getElementById('stops-container');
+        const addBtn = document.getElementById('add-stop-btn');
+
+        function updateBadges() {
+            const rows = container.querySelectorAll('.stop-row');
+            rows.forEach((row, index) => {
+                const badge = row.querySelector('.stop-badge');
+                if (badge) badge.textContent = (index + 1);
+            });
+        }
+
+        function createStopRow(name='', time='', fare='') {
+            const newRow = document.createElement('div');
+            newRow.className = 'stop-row flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900/60 p-3 rounded-2xl border border-slate-700/60';
+            newRow.innerHTML = `
+                <div class="flex items-center space-x-2 flex-1">
+                    <span class="stop-badge w-6 h-6 rounded-full bg-slate-800 text-teal-400 text-[11px] font-bold flex items-center justify-center"></span>
+                    <input type="text" name="stop_name[]" value="${name}" placeholder="Waypoint Name (e.g. Mulund)" required
+                           class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-400">
+                </div>
+                <div class="flex items-center space-x-2">
+                    <input type="time" name="stop_time[]" value="${time}"
+                           class="w-28 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400">
+                    <input type="number" name="stop_fare[]" value="${fare}" placeholder="Sub-Fare (₹)"
+                           class="w-24 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-teal-400">
+                    <button type="button" class="remove-stop-btn text-rose-400 hover:text-rose-300 p-2 text-xs">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(newRow);
+            bindRemove(newRow.querySelector('.remove-stop-btn'));
+            updateBadges();
+        }
+
+        addBtn.addEventListener('click', () => createStopRow());
+
+        function bindRemove(btn) {
+            btn.addEventListener('click', function() {
+                if (container.querySelectorAll('.stop-row').length > 1) {
+                    btn.closest('.stop-row').remove();
+                    updateBadges();
+                } else {
+                    const row = btn.closest('.stop-row');
+                    row.querySelectorAll('input').forEach(i => i.value = '');
+                }
+            });
+        }
+        container.querySelectorAll('.remove-stop-btn').forEach(bindRemove);
+
+        // Preset Corridor 1: Dadar to Ulhasnagar via Thane
+        document.getElementById('load-dadar-ulhasnagar').addEventListener('click', function() {
+            document.getElementById('route-source').value = 'Dadar, Mumbai';
+            document.getElementById('route-destination').value = 'Ulhasnagar, Thane District';
+            document.getElementById('total-cab-fare').value = '880';
+            document.getElementById('fare-per-seat').value = '220';
+            container.innerHTML = '';
+            createStopRow('Kurla Signal (Priyadarshini)', '08:50', '60');
+            createStopRow('Ghatkopar East (EEH)', '09:05', '90');
+            createStopRow('Mulund Check Naka', '09:25', '130');
+            createStopRow('Thane Teen Hath Naka', '09:40', '160');
+            createStopRow('Dombivli Kalyan Bypass', '10:05', '190');
+            createStopRow('Kalyan Station Road', '10:20', '210');
+        });
+
+        // Preset Corridor 2: Bandra to BKC
+        document.getElementById('load-bandra-bkc').addEventListener('click', function() {
+            document.getElementById('route-source').value = 'Bandra West, Mumbai';
+            document.getElementById('route-destination').value = 'BKC (Maker Maxity), Mumbai';
+            document.getElementById('total-cab-fare').value = '270';
+            document.getElementById('fare-per-seat').value = '90';
+            container.innerHTML = '';
+            createStopRow('Kalanagar Junction', '09:22', '40');
+            createStopRow('BKC ICICI Bank Tower', '09:30', '70');
+        });
+    });
+</script>
+{% endblock %}

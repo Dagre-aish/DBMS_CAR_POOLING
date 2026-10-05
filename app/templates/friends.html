@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}Friends & Social Network • Carpooling DBMS{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-8">
+
+    <!-- Header -->
+    <div class="border-b border-slate-800 pb-4">
+        <h1 class="text-2xl font-bold text-white flex items-center">
+            <i class="fa-solid fa-user-group text-emerald-400 mr-3"></i>Friends & Social Network (Rule #5)
+        </h1>
+        <p class="text-xs text-slate-400 mt-1">Connect with other riders and drivers to travel together safely</p>
+    </div>
+
+    <!-- 3-Column Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Left 2 Cols: Accepted Friends & Pending Approvals -->
+        <div class="lg:col-span-2 space-y-6">
+            
+            <!-- Pending Requests Received -->
+            {% if pending_received %}
+            <div class="bg-amber-950/30 border border-amber-500/40 rounded-3xl p-5 shadow-lg space-y-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center">
+                    <i class="fa-solid fa-bell mr-2"></i>Pending Friend Requests Received
+                </h3>
+                <div class="space-y-2">
+                    {% for p in pending_received %}
+                    <div class="flex items-center justify-between p-3 bg-slate-900/80 rounded-2xl border border-slate-700/60">
+                        <div class="flex items-center space-x-3">
+                            <img src="{{ p.Sender_Avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
+                                 class="w-9 h-9 rounded-xl object-cover">
+                            <div>
+                                <h4 class="text-xs font-bold text-white">{{ p.Sender_Name }}</h4>
+                                <span class="text-[10px] text-slate-400">Sent on {{ p.Request_Date }}</span>
+                            </div>
+                        </div>
+                        <form method="POST" action="{{ url_for('accept_friend', friend_id=p.Friend_ID) }}">
+                            <button type="submit" class="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs shadow transition">
+                                <i class="fa-solid fa-check mr-1"></i>Accept
+                            </button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Accepted Friends List -->
+            <div class="bg-slate-800/70 border border-slate-700/70 rounded-3xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                    <h2 class="text-sm font-bold text-white flex items-center">
+                        <i class="fa-solid fa-users text-emerald-400 mr-2"></i>Accepted Friends Network
+                    </h2>
+                    <span class="text-xs text-slate-400">{{ friends|length }} Connections</span>
+                </div>
+
+                {% if friends %}
+                <div class="grid grid-cols-1 gap-4">
+                    {% for f in friends %}
+                    <div class="bg-slate-900/60 border border-slate-700/60 rounded-2xl p-4 flex items-center justify-between hover:border-slate-600 transition">
+                        <div class="flex items-center space-x-3 truncate">
+                            <img src="{{ f.Friend_Avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
+                                 class="w-11 h-11 rounded-2xl object-cover ring-1 ring-slate-700">
+                            <div class="truncate">
+                                <h4 class="text-xs font-bold text-white truncate">{{ f.Friend_Name }}</h4>
+                                <span class="text-[10px] text-emerald-400 font-semibold block">{{ f.Friend_Phone }}</span>
+                            </div>
+                        </div>
+                        <a href="{{ url_for('friend_chat_view', friend_user_id=f.Friend_User_ID) }}" 
+                           class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow transition flex items-center shrink-0">
+                            <i class="fa-solid fa-comments mr-1.5 text-emerald-400"></i>Chat Anytime
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-10">
+                    <p class="text-xs text-slate-400">No accepted friends yet. Send a friend request from the right panel!</p>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+        <!-- Right 1 Col: Send Friend Request Form -->
+        <div class="space-y-6">
+            <div class="bg-slate-800/70 border border-slate-700/70 rounded-3xl p-6 shadow-xl space-y-4">
+                <h3 class="text-sm font-bold text-white flex items-center">
+                    <i class="fa-solid fa-user-plus text-sky-400 mr-2"></i>Add a New Friend
+                </h3>
+                <p class="text-xs text-slate-400">Search and send a connection request to other platform users.</p>
+
+                {% if potential_friends %}
+                <form method="POST" action="{{ url_for('friends_view') }}" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-2">Select User</label>
+                        <select name="receiver_id" required 
+                                class="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500">
+                            {% for u in potential_friends %}
+                            <option value="{{ u.User_ID }}">{{ u.Name }} ({{ u.Email }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <button type="submit" class="w-full py-2.5 bg-sky-500 hover:bg-sky-600 text-slate-950 font-bold rounded-xl text-xs shadow-md transition">
+                        <i class="fa-solid fa-paper-plane mr-1"></i>Send Friend Request
+                    </button>
+                </form>
+                {% else %}
+                <p class="text-xs text-slate-400">You are already connected or have pending requests with all users!</p>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

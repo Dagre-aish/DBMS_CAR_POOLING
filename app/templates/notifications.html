@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Notifications • Carpooling DBMS{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+            <h1 class="text-2xl font-bold text-white flex items-center">
+                <i class="fa-solid fa-bell text-emerald-400 mr-3"></i>Notifications (Rule #4)
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Real-time alerts triggered by database events, ride requests, and friend activities</p>
+        </div>
+        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs font-semibold text-slate-300">
+            {{ notifications|length }} Total Alerts
+        </span>
+    </div>
+
+    <!-- Notification List -->
+    <div class="space-y-3">
+        {% if notifications %}
+            {% for n in notifications %}
+            <div class="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-4.5 shadow-md flex items-start space-x-3.5 hover:border-slate-600 transition {% if not n.Is_Read %}ring-1 ring-emerald-500/50 bg-slate-800/95{% endif %}">
+                <!-- Type Icon -->
+                <div class="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-base shadow
+                    {% if n.Notification_Type == 'Ride_Request' %}bg-sky-500/10 text-sky-400 border border-sky-500/20
+                    {% elif n.Notification_Type == 'Request_Accepted' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+                    {% elif n.Notification_Type == 'Request_Rejected' %}bg-rose-500/10 text-rose-400 border border-rose-500/20
+                    {% elif n.Notification_Type == 'Friend_Request' or n.Notification_Type == 'Friend_Accepted' %}bg-indigo-500/10 text-indigo-400 border border-indigo-500/20
+                    {% else %}bg-slate-700/60 text-slate-300{% endif %}">
+                    <i class="fa-solid 
+                        {% if n.Notification_Type == 'Ride_Request' %}fa-ticket
+                        {% elif n.Notification_Type == 'Request_Accepted' %}fa-circle-check
+                        {% elif n.Notification_Type == 'Request_Rejected' %}fa-circle-xmark
+                        {% elif n.Notification_Type == 'Friend_Request' or n.Notification_Type == 'Friend_Accepted' %}fa-user-group
+                        {% else %}fa-bell{% endif %}"></i>
+                </div>
+
+                <!-- Message Content -->
+                <div class="flex-1 space-y-1">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            {{ n.Notification_Type|replace('_', ' ') }}
+                        </span>
+                        <span class="text-[10px] text-slate-500">{{ n.Created_At }}</span>
+                    </div>
+                    <p class="text-xs font-medium text-slate-200 leading-relaxed">{{ n.Message }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="p-12 text-center bg-slate-800/40 rounded-3xl border border-slate-700/60 space-y-2">
+            <i class="fa-solid fa-bell-slash text-2xl text-slate-500"></i>
+            <p class="text-xs text-slate-400">No notifications found for your account.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

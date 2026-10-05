@@ -1,0 +1,455 @@
+{% extends 'base.html' %}
+
+{% block title %}Cab Pool #{{ ride.Ride_ID }} Details & Interactive Route Map | CabShare{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6">
+
+    <!-- Top Navigation -->
+    <div class="flex items-center justify-between">
+        <a href="{{ url_for('rides_list') }}" class="text-xs font-semibold text-slate-400 hover:text-white transition flex items-center">
+            <i class="fa-solid fa-arrow-left mr-2"></i>Back to All Corridors
+        </a>
+        <div class="flex items-center space-x-2">
+            {% if ride.Ride_Status == 'Completed' %}
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                <i class="fa-solid fa-flag-checkered mr-1"></i>Completed
+            </span>
+            {% elif ride.Ride_Status == 'Ongoing' %}
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                <i class="fa-solid fa-spinner fa-spin mr-1"></i>Ongoing
+            </span>
+            {% else %}
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                <i class="fa-solid fa-clock mr-1"></i>Scheduled
+            </span>
+            {% endif %}
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-teal-500/10 text-teal-300 border border-teal-500/30">
+                <i class="fa-solid fa-taxi mr-1"></i>{{ ride.Ride_Type|replace('_', ' ') }} ({{ ride.Vehicle_Info }})
+            </span>
+        </div>
+    </div>
+
+    <!-- Main Corridor Card -->
+    <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-6">
+            <div class="space-y-1">
+                <span class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Commuter Pool ID: #{{ ride.Ride_ID }}</span>
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-white">
+                    {{ ride.Source }} <span class="text-emerald-400">&rarr;</span> {{ ride.Destination }}
+                </h1>
+                <p class="text-xs text-slate-300 flex items-center gap-4 pt-1">
+                    <span><i class="fa-solid fa-calendar-day mr-1.5 text-slate-400"></i>{{ ride.Date }}</span>
+                    <span><i class="fa-solid fa-clock mr-1.5 text-slate-400"></i>Departure: {{ ride.Time }}</span>
+                    <span><i class="fa-solid fa-signs-post mr-1.5 text-teal-400"></i>{{ stops|length }} Intermediate Waypoints</span>
+                </p>
+            </div>
+
+            <div class="text-left sm:text-right bg-slate-900/80 px-5 py-3 rounded-2xl border border-slate-700">
+                <span class="text-2xl font-black text-emerald-400">₹{{ ride.Fare_Per_Seat }}</span>
+                <span class="block text-[11px] text-slate-400 font-medium">Per Shared Seat</span>
+            </div>
+        </div>
+
+        <!-- Interactive OpenStreetMap (Leaflet.js) -->
+        <div class="space-y-2">
+            <div class="flex items-center justify-between">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center">
+                    <i class="fa-solid fa-map-location-dot text-emerald-400 mr-2"></i>Interactive Route & Waypoints Map (OpenStreetMap)
+                </h3>
+                <span class="text-[11px] text-slate-400">Plotted from waypoint coordinates</span>
+            </div>
+            
+            <div id="route-map" class="w-full h-80 rounded-2xl border border-slate-700/80 shadow-inner z-10 overflow-hidden"></div>
+        </div>
+
+        <!-- 3-Column Grid: Host Profile, Waypoint Itinerary & Cab Split Savings -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Host Card -->
+            <div class="bg-slate-900/80 rounded-2xl p-5 border border-slate-700/60 space-y-4">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Pool Host</h3>
+                <div class="flex items-center space-x-3">
+                    <img src="{{ ride.Driver_Avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
+                         alt="Host" class="w-12 h-12 rounded-2xl object-cover ring-2 ring-emerald-500/40">
+                    <div>
+                        <h4 class="text-sm font-bold text-white">{{ ride.Driver_Name }}</h4>
+                        <span class="text-xs text-teal-400 font-semibold">{{ ride.Vehicle_Info }}</span>
+                    </div>
+                </div>
+                <div class="space-y-1.5 text-xs text-slate-300 pt-2 border-t border-slate-800">
+                    <p><i class="fa-solid fa-phone mr-2 text-slate-500"></i>{{ ride.Driver_Phone }}</p>
+                    <p><i class="fa-solid fa-envelope mr-2 text-slate-500"></i>{{ ride.Driver_Email }}</p>
+                </div>
+            </div>
+
+            <!-- Cab Fare Splitting Calculator Card -->
+            <div class="bg-gradient-to-br from-emerald-950/40 to-slate-900/80 rounded-2xl p-5 border border-emerald-500/40 space-y-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center">
+                    <i class="fa-solid fa-piggy-bank mr-2"></i>Cab Fare Split Breakdown
+                </h3>
+                
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between text-slate-400">
+                        <span>Solo Cab Booking Cost:</span>
+                        <span class="font-semibold text-rose-300 line-through">₹{{ "%.0f"|format(solo_cab_cost) }}</span>
+                    </div>
+                    <div class="flex justify-between text-white font-bold">
+                        <span>Your Shared Split Fare:</span>
+                        <span class="text-emerald-400 text-sm">₹{{ "%.0f"|format(cost_per_person) }}</span>
+                    </div>
+                    <div class="pt-2 border-t border-slate-700/60 flex justify-between text-emerald-300 font-extrabold">
+                        <span>You Save:</span>
+                        <span>₹{{ "%.0f"|format(savings_per_seat) }} ({{ savings_pct }}% OFF)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Waypoint Itinerary Timeline -->
+            <div class="bg-slate-900/80 rounded-2xl p-5 border border-slate-700/60 space-y-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Ordered Stops (Rule #6)</h3>
+                
+                <div class="max-h-48 overflow-y-auto space-y-3 text-xs pr-1">
+                    <div class="flex items-center justify-between text-emerald-400 font-semibold">
+                        <span>🟢 Start: {{ ride.Source.split(',')[0] }}</span>
+                        <span class="text-[10px] text-slate-400">{{ ride.Time }}</span>
+                    </div>
+                    {% for stop in stops %}
+                    <div class="flex items-center justify-between text-slate-300 pl-3 border-l-2 border-dashed border-slate-700">
+                        <span>{{ stop.Stop_Order }}. {{ stop.Stop_Name.split('(')[0] }}</span>
+                        <span class="text-[10px] font-bold text-teal-400">₹{{ "%.0f"|format(stop.Estimated_Sub_Fare) }}</span>
+                    </div>
+                    {% endfor %}
+                    <div class="flex items-center justify-between text-rose-400 font-semibold">
+                        <span>🔴 End: {{ ride.Destination.split(',')[0] }}</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Seat Availability & Booking Action -->
+        <div class="pt-6 border-t border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="space-y-1.5">
+                <span class="text-xs font-semibold text-slate-300 flex items-center">
+                    <i class="fa-solid fa-couch text-emerald-400 mr-2"></i>
+                    <strong>{{ ride.Available_Seats }}</strong> of <strong>{{ ride.Total_Seats }}</strong> co-commuter seats vacant
+                </span>
+                <div class="w-64 bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-700">
+                    {% set percent = ((ride.Total_Seats - ride.Available_Seats) / ride.Total_Seats) * 100 %}
+                    <div class="bg-emerald-500 h-full rounded-full" style="width: {{ percent }}%;"></div>
+                </div>
+            </div>
+
+            <!-- Booking / Host Actions Section -->
+            <div>
+                {% if ride.Driver_ID == current_user.User_ID %}
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="px-4 py-2 bg-slate-700/60 rounded-xl text-xs font-semibold text-slate-300 border border-slate-600">
+                        <i class="fa-solid fa-user-check mr-1.5 text-emerald-400"></i>You hosted this cab-pool
+                    </div>
+                    {% if ride.Ride_Status != 'Completed' %}
+                    <form method="POST" action="{{ url_for('complete_ride', ride_id=ride.Ride_ID) }}">
+                        <button type="submit" onclick="return confirm('Are you sure you want to mark this ride as Completed? This will enable rating and reviews for all commuters.')" 
+                                class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/30 transition flex items-center">
+                            <i class="fa-solid fa-circle-check mr-1.5"></i>Complete Ride
+                        </button>
+                    </form>
+                    {% else %}
+                    <div class="px-4 py-2 bg-purple-950/60 border border-purple-500/40 rounded-xl text-xs font-bold text-purple-300">
+                        <i class="fa-solid fa-flag-checkered mr-1.5"></i>Ride Completed
+                    </div>
+                    {% endif %}
+                </div>
+                {% elif user_request %}
+                <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-700 space-y-2">
+                    <div class="flex items-center space-x-2 text-xs font-bold">
+                        <span>Your Split Status:</span>
+                        <span class="px-2.5 py-0.5 rounded-md
+                            {% if user_request.Request_Status == 'Accepted' %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/40
+                            {% elif user_request.Request_Status == 'Pending' %}bg-amber-500/20 text-amber-300 border border-amber-500/40
+                            {% else %}bg-rose-500/20 text-rose-300 border border-rose-500/40{% endif %}">
+                            {{ user_request.Request_Status }} ({{ user_request.Seats_Requested }} seat(s))
+                        </span>
+                    </div>
+                    {% if user_request.Request_Status == 'Accepted' %}
+                    <div class="flex items-center space-x-2 pt-1">
+                        <a href="{{ url_for('chat_view', request_id=user_request.Request_ID) }}" 
+                           class="inline-flex items-center px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow transition">
+                            <i class="fa-solid fa-comments mr-1.5"></i>Chat with Host (Rule #7)
+                        </a>
+                        {% if not user_request.Has_Reviewed %}
+                        <button type="button" onclick="openReviewModal('{{ user_request.Request_ID }}', '{{ ride.Driver_Name }}')"
+                                class="inline-flex items-center px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold shadow transition">
+                            <i class="fa-solid fa-star mr-1.5"></i>Rate Host
+                        </button>
+                        {% else %}
+                        <span class="text-[11px] text-amber-400 font-bold px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/30">
+                            <i class="fa-solid fa-star"></i> Reviewed Host
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% elif ride.Ride_Status == 'Completed' %}
+                <div class="px-4 py-2 bg-purple-950/60 border border-purple-500/40 rounded-xl text-xs font-bold text-purple-300">
+                    <i class="fa-solid fa-flag-checkered mr-1.5"></i>Ride Completed
+                </div>
+                {% elif ride.Available_Seats <= 0 %}
+                <div class="px-4 py-2 bg-rose-950/60 border border-rose-500/40 rounded-xl text-xs font-bold text-rose-300">
+                    <i class="fa-solid fa-ban mr-1.5"></i>Cab is Fully Booked
+                </div>
+                {% else %}
+                <!-- Request / Split Form with Sub-Trip Waypoint Selector -->
+                <form method="POST" action="{{ url_for('request_ride', ride_id=ride.Ride_ID) }}" class="flex flex-wrap items-center gap-2">
+                    <select name="pickup_point" class="px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                        <option value="{{ ride.Source }}">Pickup: {{ ride.Source.split(',')[0] }} (Start)</option>
+                        {% for st in stops %}
+                        <option value="{{ st.Stop_Name }}">Pickup: {{ st.Stop_Name.split('(')[0] }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <select name="dropoff_point" class="px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                        {% for st in stops %}
+                        <option value="{{ st.Stop_Name }}">Drop: {{ st.Stop_Name.split('(')[0] }}</option>
+                        {% endfor %}
+                        <option value="{{ ride.Destination }}" selected>Drop: {{ ride.Destination.split(',')[0] }} (End)</option>
+                    </select>
+
+                    <select name="seats_requested" class="px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500">
+                        {% for i in range(1, ride.Available_Seats + 1) %}
+                        <option value="{{ i }}">{{ i }} seat</option>
+                        {% endfor %}
+                    </select>
+
+                    <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950 shadow-lg shadow-emerald-500/20 transition">
+                        <i class="fa-solid fa-ticket mr-1"></i>Split Cab
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Active Co-Commuters in this Pool -->
+    <div class="bg-slate-800/60 border border-slate-700/60 rounded-3xl p-6 shadow-xl space-y-4">
+        <h3 class="text-sm font-bold text-white flex items-center">
+            <i class="fa-solid fa-users text-emerald-400 mr-2"></i>Co-Commuter Bookings in this Pool
+        </h3>
+        
+        {% if requests %}
+        <div class="space-y-3">
+            {% for req in requests %}
+            <div class="flex items-center justify-between p-3.5 bg-slate-900/60 rounded-2xl border border-slate-700/60">
+                <div class="flex items-center space-x-3">
+                    <img src="{{ req.Passenger_Avatar or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
+                         class="w-9 h-9 rounded-xl object-cover">
+                    <div>
+                        <h4 class="text-xs font-bold text-white">{{ req.Passenger_Name }}</h4>
+                        <span class="text-[10px] text-slate-400">
+                            {{ req.Pickup_Point or ride.Source }} &rarr; {{ req.Dropoff_Point or ride.Destination }} ({{ req.Seats_Requested }} seat(s))
+                        </span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-bold
+                        {% if req.Request_Status == 'Accepted' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/30
+                        {% elif req.Request_Status == 'Pending' %}bg-amber-500/10 text-amber-400 border border-amber-500/30
+                        {% else %}bg-rose-500/10 text-rose-400 border border-rose-500/30{% endif %}">
+                        {{ req.Request_Status }}
+                    </span>
+                    {% if req.Request_Status == 'Accepted' and (current_user.User_ID == ride.Driver_ID or current_user.User_ID == req.User_ID) %}
+                    <a href="{{ url_for('chat_view', request_id=req.Request_ID) }}" class="p-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-xl text-xs transition" title="Open Chat">
+                        <i class="fa-solid fa-comment-dots"></i>
+                    </a>
+                    {% if current_user.User_ID == ride.Driver_ID %}
+                        {% if not req.Has_Reviewed %}
+                        <button type="button" onclick="openReviewModal('{{ req.Request_ID }}', '{{ req.Passenger_Name }}')"
+                                class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow transition flex items-center">
+                            <i class="fa-solid fa-star mr-1"></i>Rate Passenger
+                        </button>
+                        {% else %}
+                        <span class="text-[10px] text-amber-400 font-bold px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/30">
+                            <i class="fa-solid fa-star"></i> Reviewed
+                        </span>
+                        {% endif %}
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-xs text-slate-400 text-center py-4">No co-commuter booking requests submitted yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- Review Modal -->
+<div id="review-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+            <h3 class="text-sm font-bold text-white flex items-center">
+                <i class="fa-solid fa-star text-amber-400 mr-2"></i>Rate & Review Co-Commuter
+            </h3>
+            <button onclick="closeReviewModal()" class="text-slate-400 hover:text-white">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form id="review-form" method="POST" action="" class="space-y-4">
+            <input type="hidden" name="next" value="{{ request.url }}">
+            <div>
+                <p class="text-xs text-slate-300">How was your commute experience with <strong id="modal-driver-name" class="text-white"></strong>?</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Rating (1 to 5 Stars) *</label>
+                <select name="rating" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-400 font-bold focus:outline-none focus:border-amber-400">
+                    <option value="5" selected>⭐⭐⭐⭐⭐ 5 Stars - Outstanding & Punctual</option>
+                    <option value="4">⭐⭐⭐⭐ 4 Stars - Very Good Commute</option>
+                    <option value="3">⭐⭐⭐ 3 Stars - Average Trip</option>
+                    <option value="2">⭐⭐ 2 Stars - Needs Improvement</option>
+                    <option value="1">⭐ 1 Star - Poor Experience</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Your Feedback & Comments</label>
+                <textarea name="comment" rows="3" placeholder="e.g. Great driver/co-commuter, on-time pickup, polite and respectful!"
+                          class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"></textarea>
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-2">
+                <button type="button" onclick="closeReviewModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl text-xs font-semibold transition">
+                    Cancel
+                </button>
+                <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow transition">
+                    Submit Review
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openReviewModal(requestId, personName) {
+        document.getElementById('review-form').action = '/reviews/add/' + requestId;
+        document.getElementById('modal-driver-name').textContent = personName;
+        const m = document.getElementById('review-modal');
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+    }
+
+    function closeReviewModal() {
+        const m = document.getElementById('review-modal');
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+    }
+
+    // Uber-like instant live refresh on Firebase events
+    window.addEventListener('firebase-live-event', function(e) {
+        const data = e.detail;
+        if (data && (data.ride_id == {{ ride.Ride_ID }} || data.event === 'request_responded')) {
+            console.log('⚡ Live Firebase update received for Ride #{{ ride.Ride_ID }}! Refreshing view...');
+            location.reload();
+        }
+    });
+</script>
+
+<!-- Leaflet.js Map Initialization & OSRM Real-Road Route Script -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const waypoints = {{ map_waypoints|tojson }};
+        
+        if (waypoints && waypoints.length > 0) {
+            const firstPt = waypoints[0];
+            const map = L.map('route-map').setView([firstPt.lat, firstPt.lng], 11);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors | OSRM Road Routing'
+            }).addTo(map);
+
+            const boundsGroup = [];
+
+            // Render custom markers for Start, Intermediate Waypoints, and End Destination
+            waypoints.forEach((pt, index) => {
+                const latLng = [pt.lat, pt.lng];
+                boundsGroup.push(latLng);
+
+                let markerHtml = '';
+                if (pt.type === 'Start') {
+                    markerHtml = `<div style="background-color: #10b981; color: white; border: 2px solid #ffffff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.4);">🟢</div>`;
+                } else if (pt.type === 'End') {
+                    markerHtml = `<div style="background-color: #ef4444; color: white; border: 2px solid #ffffff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.4);">🔴</div>`;
+                } else {
+                    markerHtml = `<div style="background-color: #0284c7; color: white; border: 2px solid #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.4);">${index}</div>`;
+                }
+
+                const customIcon = L.divIcon({
+                    html: markerHtml,
+                    className: 'custom-map-pin',
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+
+                const marker = L.marker(latLng, { icon: customIcon }).addTo(map);
+
+                let popupContent = `<div style="font-family: system-ui, sans-serif; padding: 4px;">
+                    <b style="font-size: 13px; color: #0f172a;">${pt.name}</b><br>
+                    <span style="font-size: 11px; font-weight: 700; color: #059669;">Stop Type: ${pt.type}</span>`;
+                if (pt.time) popupContent += `<br><span style="font-size: 11px; color: #475569;">ETA: ${pt.time}</span>`;
+                if (pt.fare) popupContent += `<br><span style="font-size: 11px; color: #0284c7; font-weight: 800;">Sub-Fare: ₹${pt.fare}</span>`;
+                popupContent += `</div>`;
+
+                marker.bindPopup(popupContent);
+            });
+
+            // Fetch Real Road Geometry from OSRM Driving Router
+            const osrmCoords = waypoints.map(pt => `${pt.lng},${pt.lat}`).join(';');
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${osrmCoords}?overview=full&geometries=geojson`;
+
+            fetch(osrmUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.routes && data.routes.length > 0) {
+                        const routeGeoJSON = data.routes[0].geometry;
+                        
+                        // Render exact road geometry polyline
+                        const routeLayer = L.geoJSON(routeGeoJSON, {
+                            style: {
+                                color: '#10b981',
+                                weight: 5,
+                                opacity: 0.9,
+                                lineCap: 'round',
+                                lineJoin: 'round'
+                            }
+                        }).addTo(map);
+
+                        map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+                    } else {
+                        drawFallbackPolyline();
+                    }
+                })
+                .catch(err => {
+                    console.warn('OSRM routing API offline/fallback:', err);
+                    drawFallbackPolyline();
+                });
+
+            function drawFallbackPolyline() {
+                const latlngs = waypoints.map(pt => [pt.lat, pt.lng]);
+                const polyline = L.polyline(latlngs, {
+                    color: '#10b981',
+                    weight: 4,
+                    opacity: 0.8,
+                    dashArray: '6, 6'
+                }).addTo(map);
+                map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+            }
+        }
+    });
+</script>
+{% endblock %}
