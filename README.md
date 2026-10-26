@@ -94,7 +94,7 @@ The project includes an interactive web dashboard where you can post rides, mana
 
 ### 1. Install Dependencies
 ```bash
-cd c:/Users/Aishwarya/Documents/DBMS_PROJECT_BY_ANTIGRAVITY/app
+cd c:/Users/Aishwarya/Documents/DBMS_PROJECT_BY/app
 pip install -r requirements.txt
 ```
 
