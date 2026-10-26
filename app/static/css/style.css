@@ -77,3 +77,32 @@ html.light-theme footer {
     color: #64748b !important;
 }
 
+
+/* Profile dropdown: no hover gap, 0.35s grace period before closing */
+.profile-menu {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.35s;
+}
+
+@media (hover: hover) {
+    .profile-dd:hover .profile-menu,
+    .profile-dd:focus-within .profile-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        transition-delay: 0s;
+    }
+}
+
+.profile-dd.open .profile-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition-delay: 0s;
+}
+
+.profile-dd.open .fa-chevron-down {
+    transform: rotate(180deg);
+}

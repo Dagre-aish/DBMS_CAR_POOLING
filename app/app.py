@@ -12,6 +12,7 @@ Features:
 """
 
 import os
+import hmac
 import json
 import time
 import urllib.parse
@@ -20,6 +21,10 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from db import get_db, execute_query, execute_update, get_active_engine, _init_sqlite_db, sync_to_firebase, get_from_firebase
+
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from aadhaar_verifier import verify_aadhaar_card, format_masked_aadhaar
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
@@ -458,7 +463,7 @@ def inject_global_data():
             unread_count = 0
     
     try:
-        all_users = execute_query("SELECT User_ID, Name, Phone_Number, Gender, Profile_Picture, Total_Money_Saved, Average_Rating, CO2_Saved_Kg FROM USER ORDER BY User_ID ASC")
+        all_users = execute_query("SELECT User_ID, Name, Phone_Number, Gender, Profile_Picture, Total_Money_Saved, Average_Rating, CO2_Saved_Kg, Is_Aadhaar_Verified, Aadhaar_Number FROM USER ORDER BY User_ID ASC")
     except Exception:
         all_users = []
     engine = get_active_engine()
@@ -467,19 +472,65 @@ def inject_global_data():
 # ============================================================================
 # 1. AUTHENTICATION (REGISTER, LOGIN, LOGOUT, PROFILE)
 # ============================================================================
+def _form_value(*names):
+    """Returns the first non-empty form field among several possible input names."""
+    for n in names:
+        v = request.form.get(n)
+        if v is not None and v.strip():
+            return v.strip()
+    return ''
+
+def _is_hashed(stored):
+    return isinstance(stored, str) and stored.startswith(('scrypt:', 'pbkdf2:'))
+
+def verify_user_password(user, password):
+    """Checks a password against the SQL row. Accepts hashed passwords, and
+    legacy plain-text ones (which are upgraded to a hash on first good login)."""
+    stored = (user or {}).get('Password') or ''
+    if _is_hashed(stored):
+        return check_password_hash(stored, password)
+    if hmac.compare_digest(str(stored), str(password)):
+        try:
+            execute_update("UPDATE USER SET Password = %s WHERE User_ID = %s",
+                           (generate_password_hash(password), user['User_ID']))
+        except Exception as e:
+            print(f"[WARN] Could not upgrade password hash: {e}")
+        return True
+    return False
+
+def _start_session(user):
+    session.clear()
+    session.permanent = True
+    session['user_id'] = user['User_ID']
+    session['user_name'] = user['Name']
+    session['user_phone'] = user['Phone_Number']
+    session['user_gender'] = user.get('Gender', 'Other')
+    session['user_avatar'] = user.get('Profile_Picture') or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if session.get('user_id'):
         return redirect(url_for('index'))
 
     if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        phone = request.form.get('phone_number', '').strip()
-        password = request.form.get('password', '').strip()
+        name = _form_value('name', 'full_name', 'fullname', 'username')
+        phone = _form_value('phone_number', 'phone', 'phoneNumber', 'mobile')
+        password = _form_value('password', 'passwd', 'pwd')
         gender = request.form.get('gender', 'Other')
+        if gender not in ('Male', 'Female', 'Other'):
+            gender = 'Other'
+
+        aadhaar_num_input = _form_value('aadhaar_number', 'aadhaar', 'uid')
+        aadhaar_file = request.files.get('aadhaar_file')
 
         if not name or not phone or not password:
             flash("Please fill in Name, Phone Number, and Password.", "danger")
+            return redirect(url_for('register'))
+        if len(phone) < 8:
+            flash("Phone number must be at least 8 characters.", "danger")
+            return redirect(url_for('register'))
+        if len(password) < 6:
+            flash("Password must be at least 6 characters.", "danger")
             return redirect(url_for('register'))
 
         existing = execute_query("SELECT User_ID FROM USER WHERE Phone_Number = %s", (phone,), fetchone=True)
@@ -487,31 +538,72 @@ def register():
             flash("An account with this phone number already exists. Please log in.", "warning")
             return redirect(url_for('login'))
 
+        # Aadhaar File & Gender Verification
+        is_verified = 0
+        verified_gender = None
+        masked_aadhaar = None
+        doc_rel_path = None
+
+        if aadhaar_file and aadhaar_file.filename:
+            fname = secure_filename(aadhaar_file.filename)
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in ('.png', '.jpg', '.jpeg', '.webp', '.pdf'):
+                flash("Invalid document format. Please upload JPG, PNG, or PDF of your Aadhaar card.", "danger")
+                return redirect(url_for('register'))
+
+            timestamp = int(time.time())
+            save_name = f"aadhaar_{phone}_{timestamp}{ext}"
+            upload_dir = os.path.join(app.static_folder, 'uploads', 'aadhaar')
+            os.makedirs(upload_dir, exist_ok=True)
+            full_save_path = os.path.join(upload_dir, save_name)
+            aadhaar_file.save(full_save_path)
+            doc_rel_path = f"/static/uploads/aadhaar/{save_name}"
+
+            # Verify gender against uploaded Aadhaar card using OCR & keywords
+            ok, det_gender, masked_num, verify_msg = verify_aadhaar_card(
+                full_save_path, gender, aadhaar_num_input
+            )
+
+            if not ok:
+                try:
+                    os.remove(full_save_path)
+                except Exception:
+                    pass
+                flash(f"⚠️ {verify_msg}", "danger")
+                return redirect(url_for('register'))
+
+            is_verified = 1
+            verified_gender = det_gender or gender
+            masked_aadhaar = masked_num or format_masked_aadhaar(aadhaar_num_input)
+            flash(f"✅ {verify_msg}", "success")
+        elif aadhaar_num_input:
+            # Fallback if card number provided without file
+            masked_aadhaar = format_masked_aadhaar(aadhaar_num_input)
+            is_verified = 1
+            verified_gender = gender
+        else:
+            flash("Please upload your regular or masked Aadhaar card to verify your identity and gender.", "warning")
+            return redirect(url_for('register'))
+
         avatar = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150" if gender == 'Female' else "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150"
+        pw_hash = generate_password_hash(password)
 
         try:
             user_id, _ = execute_update("""
-                INSERT INTO USER (Name, Phone_Number, Password, Gender, Profile_Picture, Total_Money_Saved, Average_Rating, Total_Reviews, CO2_Saved_Kg)
-                VALUES (%s, %s, %s, %s, %s, 0.00, 5.00, 0, 0.00)
-            """, (name, phone, password, gender, avatar))
+                INSERT INTO USER (Name, Phone_Number, Password, Gender, Profile_Picture, Total_Money_Saved, Average_Rating, Total_Reviews, CO2_Saved_Kg, Aadhaar_Number, Aadhaar_Doc_Path, Is_Aadhaar_Verified, Verified_Gender)
+                VALUES (%s, %s, %s, %s, %s, 0.00, 5.00, 0, 0.00, %s, %s, %s, %s)
+            """, (name, phone, pw_hash, gender, avatar, masked_aadhaar, doc_rel_path, is_verified, verified_gender))
 
-            # Sync User Account to Firebase Cloud for cross-container serverless persistence
+            # Cloud copy stores only the hash, never the plain password
             sync_to_firebase(f"users/{phone}", {
-                'user_id': user_id,
-                'name': name,
-                'phone': phone,
-                'password': password,
-                'gender': gender,
-                'avatar': avatar
+                'user_id': user_id, 'name': name, 'phone': phone,
+                'password_hash': pw_hash, 'gender': gender, 'avatar': avatar,
+                'is_aadhaar_verified': is_verified, 'masked_aadhaar': masked_aadhaar
             })
 
-            session.permanent = True
-            session['user_id'] = user_id
-            session['user_name'] = name
-            session['user_phone'] = phone
-            session['user_gender'] = gender
-            session['user_avatar'] = avatar
-            flash(f"Welcome, {name}! Your commuter account was created successfully.", "success")
+            user = execute_query("SELECT * FROM USER WHERE User_ID = %s", (user_id,), fetchone=True)
+            _start_session(user)
+            flash(f"Welcome, {name}! Your commuter account was created & Aadhaar verified successfully.", "success")
             return redirect(url_for('index'))
         except Exception as e:
             flash(f"Could not create account: {e}", "danger")
@@ -519,27 +611,30 @@ def register():
 
     return render_template('register.html')
 
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    """Alias so templates that link to url_for('signup') keep working."""
+    return register()
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'GET' and session.get('user_id'):
         return redirect(url_for('index'))
 
     if request.method == 'POST':
-        phone = request.form.get('phone_number', '').strip()
-        password = request.form.get('password', '').strip()
+        phone = _form_value('phone_number', 'phone', 'phoneNumber', 'mobile', 'username')
+        password = _form_value('password', 'passwd', 'pwd')
+        print(f"[DEBUG] login form fields received: {list(request.form.keys())}")
 
         if not phone or not password:
             flash("Please fill in both Phone Number and Password.", "danger")
             return redirect(url_for('login'))
 
-        # 1. Primary DB lookup
-        user = execute_query(
-            "SELECT * FROM USER WHERE Phone_Number = %s AND Password = %s",
-            (phone, password),
-            fetchone=True
-        )
+        # 1. Look the user up in SQL by phone, then verify the password in Python
+        user = execute_query("SELECT * FROM USER WHERE Phone_Number = %s", (phone,), fetchone=True)
+        authenticated = bool(user) and verify_user_password(user, password)
 
-        # 2. Fallback for pre-seeded demo accounts if container DB is fresh
+        # 2. Pre-seeded demo accounts, only if that phone is not in the DB yet
         if not user and password == 'pass123':
             seed_accounts = {
                 '9876543210': {'user_id': 1, 'name': 'Aishwarya D.', 'gender': 'Female', 'avatar': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'},
@@ -552,44 +647,52 @@ def login():
                     execute_update("""
                         INSERT OR IGNORE INTO USER (User_ID, Name, Phone_Number, Password, Gender, Profile_Picture, Total_Money_Saved, Average_Rating, Total_Reviews, CO2_Saved_Kg)
                         VALUES (%s, %s, %s, %s, %s, %s, 1250.00, 4.95, 12, 45.20)
-                    """, (info['user_id'], info['name'], phone, password, info['gender'], info['avatar']))
-                except Exception:
-                    pass
+                    """, (info['user_id'], info['name'], phone, generate_password_hash(password), info['gender'], info['avatar']))
+                except Exception as e:
+                    print(f"[WARN] Demo account insert failed: {e}")
                 user = execute_query("SELECT * FROM USER WHERE Phone_Number = %s", (phone,), fetchone=True)
+                authenticated = bool(user)
 
-        # 3. Fallback to Firebase Cloud DB if user registered on another container
+        # 3. Firebase fallback (serverless containers with a fresh DB)
         if not user:
             fb_user = get_from_firebase(f"users/{phone}")
-            if fb_user and str(fb_user.get('password')) == str(password):
-                try:
-                    execute_update("""
-                        INSERT OR IGNORE INTO USER (Name, Phone_Number, Password, Gender, Profile_Picture, Total_Money_Saved, Average_Rating, Total_Reviews, CO2_Saved_Kg)
-                        VALUES (%s, %s, %s, %s, %s, 0.00, 5.00, 0, 0.00)
-                    """, (fb_user.get('name', 'Commuter'), phone, password, fb_user.get('gender', 'Other'), fb_user.get('avatar', '')))
-                except Exception:
-                    pass
-                user = execute_query(
-                    "SELECT * FROM USER WHERE Phone_Number = %s AND Password = %s",
-                    (phone, password),
-                    fetchone=True
-                )
+            if fb_user:
+                fb_hash = fb_user.get('password_hash')
+                fb_ok = check_password_hash(fb_hash, password) if fb_hash else \
+                        str(fb_user.get('password')) == str(password)
+                if fb_ok:
+                    try:
+                        execute_update("""
+                            INSERT OR IGNORE INTO USER (Name, Phone_Number, Password, Gender, Profile_Picture, Total_Money_Saved, Average_Rating, Total_Reviews, CO2_Saved_Kg)
+                            VALUES (%s, %s, %s, %s, %s, 0.00, 5.00, 0, 0.00)
+                        """, (fb_user.get('name', 'Commuter'), phone, fb_hash or generate_password_hash(password),
+                              fb_user.get('gender', 'Other'), fb_user.get('avatar', '')))
+                    except Exception as e:
+                        print(f"[WARN] Firebase user restore failed: {e}")
+                    user = execute_query("SELECT * FROM USER WHERE Phone_Number = %s", (phone,), fetchone=True)
+                    authenticated = bool(user)
 
-        if user:
-            session.clear()
-            session.permanent = True
-            session['user_id'] = user['User_ID']
-            session['user_name'] = user['Name']
-            session['user_phone'] = user['Phone_Number']
-            session['user_gender'] = user['Gender']
-            session['user_avatar'] = user.get('Profile_Picture', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150')
+        if user and authenticated:
+            _start_session(user)
             flash(f"Welcome back, {user['Name']}!", "success")
             next_page = request.args.get('next')
+            if not (next_page and next_page.startswith('/') and not next_page.startswith('//')):
+                next_page = None   # block open redirects
             return redirect(next_page or url_for('index'))
-        else:
-            flash(f"Invalid phone number or password. Click one of the Instant Demo Login buttons below!", "danger")
-            return redirect(url_for('login'))
+
+        flash("Invalid phone number or password.", "danger")
+        return redirect(url_for('login'))
 
     return render_template('login.html')
+
+@app.route('/db-status')
+def db_status():
+    """Quick check of which database the login is really using."""
+    try:
+        n = execute_query("SELECT COUNT(*) AS c FROM USER", fetchone=True)['c']
+        return jsonify(engine=get_active_engine(), users=n)
+    except Exception as e:
+        return jsonify(engine=get_active_engine(), error=str(e)), 500
 
 @app.route('/logout')
 def logout():

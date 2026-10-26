@@ -1,42 +1,30 @@
 {% extends 'base.html' %}
-
-{% block title %}Demo Commuter Accounts • CabShare{% endblock %}
-
+{% block title %}Login • CabShare{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto my-6 space-y-6">
-
-    <!-- Card Header -->
-    <div class="text-center space-y-2">
-        <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto text-2xl shadow-lg shadow-emerald-500/10">
-            <i class="fa-solid fa-users text-emerald-400"></i>
-        </div>
-        <h1 class="text-2xl font-black text-white">Select Demo Commuter Account</h1>
-        <p class="text-xs text-slate-400">Click any profile below to instantly test cab pools, split requests, chat, and passes without login passwords.</p>
+<div class="max-w-md mx-auto my-10">
+  <div class="bg-slate-800/80 border border-slate-700 rounded-3xl p-8 shadow-xl">
+    <div class="text-center mb-6">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl">
+        <i class="fa-solid fa-right-to-bracket"></i>
+      </div>
+      <h1 class="text-2xl font-black text-white mt-4">Welcome Back</h1>
+      <p class="text-sm text-slate-400 mt-1">Login to your CabShare account.</p>
     </div>
-
-    <!-- 1-Click Profile Selection Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {% for u in demo_users %}
-        <a href="{{ url_for('switch_user', user_id=u.User_ID) }}" 
-           class="bg-slate-800/90 border border-slate-700/80 hover:border-emerald-500/80 rounded-3xl p-5 shadow-xl transition transform hover:-translate-y-1 group flex flex-col justify-between">
-            <div class="flex items-start space-x-3.5">
-                <img src="{{ u.Profile_Picture }}" class="w-12 h-12 rounded-2xl object-cover ring-2 ring-emerald-500/40">
-                <div class="space-y-1">
-                    <h3 class="text-sm font-bold text-white group-hover:text-emerald-400 transition">{{ u.Name }}</h3>
-                    <p class="text-[11px] text-emerald-400 font-semibold">{{ u.Role }}</p>
-                    <p class="text-[10px] text-slate-400">Phone: {{ u.Phone_Number }} • {{ u.Gender }}</p>
-                </div>
-            </div>
-
-            <div class="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs">
-                <span class="text-amber-400 font-bold text-[11px]">⭐ {{ u.Average_Rating }} Rating</span>
-                <span class="px-3 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs shadow-md shadow-emerald-500/20 flex items-center gap-1 group-hover:bg-emerald-400 transition">
-                    <i class="fa-solid fa-right-to-bracket"></i> Switch Profile
-                </span>
-            </div>
-        </a>
-        {% endfor %}
-    </div>
-
+    <form method="POST" class="space-y-4">
+      <div>
+        <label class="text-xs text-slate-300">Phone Number</label>
+        <input type="tel" name="phone_number" required autocomplete="tel" class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-white" placeholder="Enter phone number">
+      </div>
+      <div>
+        <label class="text-xs text-slate-300">Password</label>
+        <input type="password" name="password" required autocomplete="current-password" class="w-full mt-1 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-white" placeholder="Enter password">
+      </div>
+      <button type="submit" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">Login</button>
+    </form>
+    <p class="text-center text-sm text-slate-400 mt-5">
+      Don't have an account?
+      <a href="{{ url_for('register') }}" class="text-emerald-400 font-semibold">Create one</a>
+    </p>
+  </div>
 </div>
 {% endblock %}

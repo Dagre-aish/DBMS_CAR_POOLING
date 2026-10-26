@@ -1,21 +1,10 @@
--- ============================================================================
--- DATABASE MANAGEMENT SYSTEMS PROJECT: CARPOOLING & RIDE-SHARING SYSTEM
--- Script 02: Triggers, Stored Procedures, Functions & Views
--- Enforces Business Rules #7, #8, Auto-Notifications, & Business Operations
--- ============================================================================
-
 USE carpooling_db;
 
 DELIMITER //
 
--- ============================================================================
--- 1. TRIGGERS: AUTOMATED BUSINESS LOGIC
--- ============================================================================
+-- Triggers keep the main business rules enforced automatically.
 
--- ----------------------------------------------------------------------------
--- TRIGGER 1: trg_validate_seats_before_request
--- Rule: Cannot request more seats than currently available in the Ride.
--- ----------------------------------------------------------------------------
+-- Check seats and ride status before a request is created.
 DROP TRIGGER IF EXISTS trg_validate_seats_before_request //
 CREATE TRIGGER trg_validate_seats_before_request
 BEFORE INSERT ON RIDE_REQUEST
@@ -23,27 +12,24 @@ FOR EACH ROW
 BEGIN
     DECLARE v_available INT;
     DECLARE v_status VARCHAR(50);
-    
-    SELECT Available_Seats, Ride_Status 
+
+    SELECT Available_Seats, Ride_Status
     INTO v_available, v_status
-    FROM RIDE 
+    FROM RIDE
     WHERE Ride_ID = NEW.Ride_ID;
-    
+
     IF v_status != 'Scheduled' THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: Cannot request a ride that is not in Scheduled status.';
     END IF;
-    
+
     IF NEW.Seats_Requested > v_available THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: Requested seats exceed available seats for this ride.';
     END IF;
 END //
 
--- ----------------------------------------------------------------------------
--- TRIGGER 2: trg_after_ride_request_insert
--- Action: Automatically create a NOTIFICATION for the Driver when a request arrives.
--- ----------------------------------------------------------------------------
+-- Let the driver know when a new request comes in.
 DROP TRIGGER IF EXISTS trg_after_ride_request_insert //
 CREATE TRIGGER trg_after_ride_request_insert
 AFTER INSERT ON RIDE_REQUEST
@@ -53,19 +39,16 @@ BEGIN
     DECLARE v_passenger_name VARCHAR(100);
     DECLARE v_source VARCHAR(150);
     DECLARE v_destination VARCHAR(150);
-    
-    -- Get Driver & Ride info
-    SELECT Driver_ID, Source, Destination 
+
+    SELECT Driver_ID, Source, Destination
     INTO v_driver_id, v_source, v_destination
-    FROM RIDE 
+    FROM RIDE
     WHERE Ride_ID = NEW.Ride_ID;
-    
-    -- Get Passenger name
+
     SELECT Name INTO v_passenger_name
-    FROM USER 
+    FROM USER
     WHERE User_ID = NEW.User_ID;
-    
-    -- Insert notification for driver
+
     INSERT INTO NOTIFICATION (User_ID, Notification_Type, Message, Is_Read, Created_At)
     VALUES (
         v_driver_id,
@@ -76,13 +59,7 @@ BEGIN
     );
 END //
 
--- ----------------------------------------------------------------------------
--- TRIGGER 3: trg_after_ride_request_status_update (BUSINESS RULE #8)
--- Rule: "Seats are updated based on accepted requests."
--- When status becomes 'Accepted', deduct available seats.
--- If an accepted request is later 'Cancelled' or 'Rejected', restore seats.
--- Also notifies the passenger about the status change.
--- ----------------------------------------------------------------------------
+-- Update seats and notify the passenger when a request changes.
 DROP TRIGGER IF EXISTS trg_after_ride_request_status_update //
 CREATE TRIGGER trg_after_ride_request_status_update
 AFTER UPDATE ON RIDE_REQUEST
@@ -90,19 +67,17 @@ FOR EACH ROW
 BEGIN
     DECLARE v_source VARCHAR(150);
     DECLARE v_destination VARCHAR(150);
-    
-    SELECT Source, Destination 
+
+    SELECT Source, Destination
     INTO v_source, v_destination
-    FROM RIDE 
+    FROM RIDE
     WHERE Ride_ID = NEW.Ride_ID;
-    
-    -- Case A: Request Accepted -> Deduct Available Seats
+
     IF OLD.Request_Status != 'Accepted' AND NEW.Request_Status = 'Accepted' THEN
         UPDATE RIDE
         SET Available_Seats = Available_Seats - NEW.Seats_Requested
         WHERE Ride_ID = NEW.Ride_ID;
-        
-        -- Send notification to Passenger
+
         INSERT INTO NOTIFICATION (User_ID, Notification_Type, Message, Is_Read, Created_At)
         VALUES (
             NEW.User_ID,
@@ -112,15 +87,13 @@ BEGIN
             NOW()
         );
     END IF;
-    
-    -- Case B: Request was Accepted but now Cancelled/Rejected -> Restore Available Seats
+
     IF OLD.Request_Status = 'Accepted' AND (NEW.Request_Status = 'Cancelled' OR NEW.Request_Status = 'Rejected') THEN
         UPDATE RIDE
         SET Available_Seats = Available_Seats + NEW.Seats_Requested
         WHERE Ride_ID = NEW.Ride_ID;
     END IF;
-    
-    -- Case C: Request Rejected
+
     IF OLD.Request_Status = 'Pending' AND NEW.Request_Status = 'Rejected' THEN
         INSERT INTO NOTIFICATION (User_ID, Notification_Type, Message, Is_Read, Created_At)
         VALUES (
@@ -133,11 +106,7 @@ BEGIN
     END IF;
 END //
 
--- ----------------------------------------------------------------------------
--- TRIGGER 4: trg_verify_chat_permission (BUSINESS RULE #7)
--- Rule: "After a request is accepted, users can chat."
--- Ensures chat messages can only be sent if the associated Ride_Request is 'Accepted'.
--- ----------------------------------------------------------------------------
+-- Chat is allowed only between the driver and passenger of an accepted request.
 DROP TRIGGER IF EXISTS trg_verify_chat_permission //
 CREATE TRIGGER trg_verify_chat_permission
 BEFORE INSERT ON CHAT
@@ -146,21 +115,18 @@ BEGIN
     DECLARE v_request_status VARCHAR(50);
     DECLARE v_passenger_id INT;
     DECLARE v_driver_id INT;
-    
-    -- Get Request status and associated users
+
     SELECT rr.Request_Status, rr.User_ID, r.Driver_ID
     INTO v_request_status, v_passenger_id, v_driver_id
     FROM RIDE_REQUEST rr
     JOIN RIDE r ON rr.Ride_ID = r.Ride_ID
     WHERE rr.Request_ID = NEW.Request_ID;
-    
-    -- Check 1: Must be accepted
+
     IF v_request_status IS NULL OR v_request_status != 'Accepted' THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error (Business Rule #7): Chat is only allowed after the ride request has been ACCEPTED.';
     END IF;
-    
-    -- Check 2: Sender & Receiver must be the Passenger and Driver of this request
+
     IF NOT (
         (NEW.Sender_ID = v_passenger_id AND NEW.Receiver_ID = v_driver_id) OR
         (NEW.Sender_ID = v_driver_id AND NEW.Receiver_ID = v_passenger_id)
@@ -170,10 +136,7 @@ BEGIN
     END IF;
 END //
 
--- ----------------------------------------------------------------------------
--- TRIGGER 5: trg_notify_friend_request
--- Action: Automatically notify receiver when a friend request is sent or accepted.
--- ----------------------------------------------------------------------------
+-- Notify the receiver when a friend request is sent.
 DROP TRIGGER IF EXISTS trg_notify_friend_request //
 CREATE TRIGGER trg_notify_friend_request
 AFTER INSERT ON FRIEND
@@ -181,7 +144,7 @@ FOR EACH ROW
 BEGIN
     DECLARE v_sender_name VARCHAR(100);
     SELECT Name INTO v_sender_name FROM USER WHERE User_ID = NEW.Sender_ID;
-    
+
     INSERT INTO NOTIFICATION (User_ID, Notification_Type, Message, Is_Read, Created_At)
     VALUES (
         NEW.Receiver_ID,
@@ -192,14 +155,7 @@ BEGIN
     );
 END //
 
--- ============================================================================
--- 2. STORED PROCEDURES: TRANSACTIONAL OPERATIONS
--- ============================================================================
-
--- ----------------------------------------------------------------------------
--- PROCEDURE 1: sp_create_ride
--- Allows a driver to create a new ride with validation.
--- ----------------------------------------------------------------------------
+-- Create a ride after validating the basic inputs.
 DROP PROCEDURE IF EXISTS sp_create_ride //
 CREATE PROCEDURE sp_create_ride(
     IN p_driver_id INT,
@@ -219,27 +175,24 @@ BEGIN
     END;
 
     START TRANSACTION;
-    
+
     IF p_total_seats <= 0 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Total seats must be greater than 0.';
     END IF;
-    
+
     IF p_fare < 0 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fare cannot be negative.';
     END IF;
 
     INSERT INTO RIDE (Driver_ID, Source, Destination, Date, Time, Total_Seats, Available_Seats, Fare_Per_Seat, Ride_Status)
     VALUES (p_driver_id, p_source, p_destination, p_date, p_time, p_total_seats, p_total_seats, p_fare, 'Scheduled');
-    
+
     SET p_ride_id = LAST_INSERT_ID();
-    
+
     COMMIT;
 END //
 
--- ----------------------------------------------------------------------------
--- PROCEDURE 2: sp_book_ride
--- Allows a passenger to request seats on a ride.
--- ----------------------------------------------------------------------------
+-- Create a pending booking request for a ride.
 DROP PROCEDURE IF EXISTS sp_book_ride //
 CREATE PROCEDURE sp_book_ride(
     IN p_user_id INT,
@@ -250,7 +203,7 @@ CREATE PROCEDURE sp_book_ride(
 BEGIN
     DECLARE v_driver_id INT;
     DECLARE v_available INT;
-    
+
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -258,31 +211,28 @@ BEGIN
     END;
 
     START TRANSACTION;
-    
-    -- Check if user is trying to book their own ride
+
+    -- Make sure the driver cannot book their own ride.
     SELECT Driver_ID, Available_Seats INTO v_driver_id, v_available
     FROM RIDE WHERE Ride_ID = p_ride_id;
-    
+
     IF v_driver_id = p_user_id THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Drivers cannot book requests for their own rides.';
     END IF;
-    
+
     IF p_seats_requested > v_available THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Not enough available seats.';
     END IF;
-    
+
     INSERT INTO RIDE_REQUEST (User_ID, Ride_ID, Seats_Requested, Request_Status, Request_Time)
     VALUES (p_user_id, p_ride_id, p_seats_requested, 'Pending', NOW());
-    
+
     SET p_request_id = LAST_INSERT_ID();
-    
+
     COMMIT;
 END //
 
--- ----------------------------------------------------------------------------
--- PROCEDURE 3: sp_respond_ride_request
--- Allows a driver to Accept or Reject a pending ride request.
--- ----------------------------------------------------------------------------
+-- Let the driver accept or reject a pending request.
 DROP PROCEDURE IF EXISTS sp_respond_ride_request //
 CREATE PROCEDURE sp_respond_ride_request(
     IN p_request_id INT,
@@ -292,7 +242,7 @@ CREATE PROCEDURE sp_respond_ride_request(
 BEGIN
     DECLARE v_actual_driver_id INT;
     DECLARE v_current_status VARCHAR(50);
-    
+
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -300,37 +250,33 @@ BEGIN
     END;
 
     START TRANSACTION;
-    
+
     SELECT r.Driver_ID, rr.Request_Status
     INTO v_actual_driver_id, v_current_status
     FROM RIDE_REQUEST rr
     JOIN RIDE r ON rr.Ride_ID = r.Ride_ID
     WHERE rr.Request_ID = p_request_id;
-    
+
     IF v_actual_driver_id IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Ride Request not found.';
     END IF;
-    
+
     IF v_actual_driver_id != p_driver_id THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unauthorized: Only the driver of this ride can respond.';
     END IF;
-    
+
     IF v_current_status != 'Pending' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This request has already been processed.';
     END IF;
-    
-    -- Update status (which will trigger trg_after_ride_request_status_update for seat updates)
+
     UPDATE RIDE_REQUEST
     SET Request_Status = p_decision
     WHERE Request_ID = p_request_id;
-    
+
     COMMIT;
 END //
 
--- ----------------------------------------------------------------------------
--- PROCEDURE 4: sp_search_rides
--- Search rides by source, destination, date, or intermediate stops.
--- ----------------------------------------------------------------------------
+-- Find scheduled rides using the supplied search filters.
 DROP PROCEDURE IF EXISTS sp_search_rides //
 CREATE PROCEDURE sp_search_rides(
     IN p_source VARCHAR(150),
@@ -339,7 +285,7 @@ CREATE PROCEDURE sp_search_rides(
     IN p_min_seats INT
 )
 BEGIN
-    SELECT 
+    SELECT
         r.Ride_ID,
         r.Source,
         r.Destination,
@@ -372,16 +318,11 @@ END //
 
 DELIMITER ;
 
--- ============================================================================
--- 3. DATABASE VIEWS
--- ============================================================================
+-- Stored procedures handle the main ride operations.
 
--- ----------------------------------------------------------------------------
--- VIEW 1: vw_active_rides_catalog
--- Comprehensive overview of all available rides with Driver & Stops data
--- ----------------------------------------------------------------------------
+-- Show available rides together with driver and route details.
 CREATE OR REPLACE VIEW vw_active_rides_catalog AS
-SELECT 
+SELECT
     r.Ride_ID,
     r.Source,
     r.Destination,
@@ -397,17 +338,14 @@ SELECT
     u.Email AS Driver_Email,
     u.Phone_Number AS Driver_Phone,
     (SELECT COUNT(*) FROM STOP s WHERE s.Ride_ID = r.Ride_ID) AS Number_Of_Stops,
-    (SELECT GROUP_CONCAT(s2.Stop_Name ORDER BY s2.Stop_Order ASC SEPARATOR ' ➔ ') 
+    (SELECT GROUP_CONCAT(s2.Stop_Name ORDER BY s2.Stop_Order ASC SEPARATOR ' ➔ ')
      FROM STOP s2 WHERE s2.Ride_ID = r.Ride_ID) AS Route_Itinerary
 FROM RIDE r
 JOIN USER u ON r.Driver_ID = u.User_ID;
 
--- ----------------------------------------------------------------------------
--- VIEW 2: vw_ride_requests_detailed
--- Detailed view of requests showing passenger info, driver info, and status
--- ----------------------------------------------------------------------------
+-- Show booking details with passenger, driver and fare information.
 CREATE OR REPLACE VIEW vw_ride_requests_detailed AS
-SELECT 
+SELECT
     rr.Request_ID,
     rr.Seats_Requested,
     rr.Request_Status,
@@ -431,12 +369,9 @@ JOIN USER p ON rr.User_ID = p.User_ID
 JOIN RIDE r ON rr.Ride_ID = r.Ride_ID
 JOIN USER d ON r.Driver_ID = d.User_ID;
 
--- ----------------------------------------------------------------------------
--- VIEW 3: vw_driver_performance_analytics
--- Analytical summary for drivers: Total rides, earnings, occupancy rate
--- ----------------------------------------------------------------------------
+-- Summarize ride activity, revenue and occupancy for each driver.
 CREATE OR REPLACE VIEW vw_driver_performance_analytics AS
-SELECT 
+SELECT
     u.User_ID AS Driver_ID,
     u.Name AS Driver_Name,
     u.Email,
@@ -451,12 +386,9 @@ FROM USER u
 LEFT JOIN RIDE r ON u.User_ID = r.Driver_ID
 GROUP BY u.User_ID, u.Name, u.Email, u.Phone_Number;
 
--- ----------------------------------------------------------------------------
--- VIEW 4: vw_user_friends_network
--- Shows accepted friend connections symmetrically
--- ----------------------------------------------------------------------------
+-- Show accepted friendships with both users' details.
 CREATE OR REPLACE VIEW vw_user_friends_network AS
-SELECT 
+SELECT
     f.Friend_ID,
     f.Sender_ID AS User1_ID,
     u1.Name AS User1_Name,

@@ -7,7 +7,7 @@ A complete **Database Management Systems (DBMS)** project developed strictly acc
 ## 📌 Project Architecture
 
 ```
-DBMS_PROJECT/
+DBMS_PROJECT_BY_ANTIGRAVITY/
 ├── database/
 │   ├── 01_schema.sql             # Table DDL, Primary Keys, Foreign Keys, CHECK constraints & Indexes
 │   ├── 02_triggers_procedures.sql # Automated Triggers (Rules 7 & 8), Stored Procedures & Views
@@ -94,7 +94,7 @@ The project includes an interactive web dashboard where you can post rides, mana
 
 ### 1. Install Dependencies
 ```bash
-cd c:/Users/Aishwarya/Documents/DBMS_PROJECT/app
+cd c:/Users/Aishwarya/Documents/DBMS_PROJECT_BY_ANTIGRAVITY/app
 pip install -r requirements.txt
 ```
 

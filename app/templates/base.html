@@ -80,36 +80,8 @@
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-white">
 
-    <!-- 1-Click Demo Account Switcher Bar (No Login Required) -->
-    <div class="bg-slate-950 border-b border-slate-800/80 py-2 px-4 text-xs sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center space-x-2">
-                <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold flex items-center gap-1">
-                    <i class="fa-solid fa-bolt text-amber-400"></i> Demo Mode Active
-                </span>
-                <span class="text-slate-400 font-medium text-[11px]">Active Profile:</span>
-                <span class="font-bold text-white text-[11px] flex items-center gap-1">
-                    <img src="{{ current_user.Profile_Picture }}" class="w-4 h-4 rounded-full object-cover">
-                    {{ current_user.Name if current_user else 'Aishwarya D.' }}
-                </span>
-            </div>
-            
-            <div class="flex items-center space-x-1.5 overflow-x-auto">
-                <span class="text-slate-400 text-[10px] uppercase font-bold mr-1 hidden sm:inline">1-Click Switch:</span>
-                {% for u in demo_users %}
-                <a href="{{ url_for('switch_user', user_id=u.User_ID) }}" 
-                   class="px-2.5 py-1 rounded-xl text-[11px] font-bold transition flex items-center space-x-1.5
-                          {% if current_user and current_user.User_ID == u.User_ID %}bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-400{% else %}bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700{% endif %}">
-                    <img src="{{ u.Profile_Picture }}" class="w-4 h-4 rounded-full object-cover">
-                    <span>{{ u.Name.split(' ')[0] }}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-
     <!-- Top Navigation Bar -->
-    <nav class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
+    <nav class="relative z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 
@@ -185,8 +157,8 @@
                     </a>
 
                     <!-- Logged-in User Dropdown -->
-                    <div class="relative group">
-                        <button class="flex items-center space-x-2 p-1.5 rounded-xl hover:bg-slate-800 border border-slate-700/60 transition">
+                    <div class="relative group profile-dd" id="profileDropdown">
+                        <button type="button" id="profileBtn" aria-haspopup="true" class="flex items-center space-x-2 p-1.5 rounded-xl hover:bg-slate-800 border border-slate-700/60 transition">
                             <img src="{{ current_user.Profile_Picture or 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' }}" 
                                  alt="Avatar" class="w-8 h-8 rounded-lg object-cover ring-2 ring-emerald-500/40">
                             <div class="hidden lg:block text-left pr-1">
@@ -197,7 +169,8 @@
                         </button>
                         
                         <!-- Dropdown Menu -->
-                        <div class="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl py-2 hidden group-hover:block z-50">
+                        <div class="profile-menu absolute right-0 top-full pt-2 w-56 z-50">
+                        <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl py-2">
                             <div class="px-4 py-2 border-b border-slate-700/60">
                                 <p class="text-xs font-bold text-white">{{ current_user.Name }}</p>
                                 <p class="text-[11px] text-slate-400">{{ current_user.Phone_Number }}</p>
@@ -218,6 +191,7 @@
                                     <i class="fa-solid fa-right-from-bracket mr-2"></i>Log Out
                                 </a>
                             </div>
+                        </div>
                         </div>
                     </div>
 
@@ -303,6 +277,25 @@
             }
         }
         document.addEventListener('DOMContentLoaded', updateThemeIcon);
+
+        // Profile dropdown: tap to open on touch screens (hover handles desktop)
+        (function () {
+            const dd = document.getElementById('profileDropdown');
+            const btn = document.getElementById('profileBtn');
+            if (!dd || !btn) return;
+            const canHover = () => window.matchMedia('(hover: hover)').matches;
+            btn.addEventListener('click', function (e) {
+                if (canHover()) return;
+                e.stopPropagation();
+                dd.classList.toggle('open');
+            });
+            document.addEventListener('click', function (e) {
+                if (!dd.contains(e.target)) dd.classList.remove('open');
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') dd.classList.remove('open');
+            });
+        })();
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {

@@ -29,7 +29,11 @@
                              alt="Avatar" class="w-12 h-12 rounded-2xl object-cover ring-2 ring-slate-700">
                         <div>
                             <h3 class="text-sm font-bold text-white">{{ u.Name }}</h3>
-                            <span class="text-[11px] text-slate-400 block">ID: #{{ u.User_ID }} • {{ u.Gender }}</span>
+                            <span class="text-[11px] text-slate-400 block">ID: #{{ u.User_ID }} • {{ u.Gender }}
+                                {% if u.Is_Aadhaar_Verified %}
+                                <span class="text-emerald-400 font-bold ml-1" title="Aadhaar Verified Commuter"><i class="fa-solid fa-shield-check"></i> Verified</span>
+                                {% endif %}
+                            </span>
                         </div>
                     </div>
                     {% if u.User_ID == current_user.User_ID %}

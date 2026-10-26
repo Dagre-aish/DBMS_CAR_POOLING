@@ -54,6 +54,7 @@ DB_PORT = int(os.getenv('DB_PORT', 3306))
 DB_USER = os.getenv('DB_USER', 'root')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'root')
 DB_NAME = os.getenv('DB_NAME', 'carpooling_db')
+REQUIRE_MYSQL = os.getenv('REQUIRE_MYSQL', '0') == '1'   # 1 = never silently fall back to SQLite
 FIREBASE_DATABASE_URL = os.getenv('FIREBASE_DATABASE_URL', 'https://baal-db05a-default-rtdb.asia-southeast1.firebasedatabase.app')
 
 if os.getenv('VERCEL') or not os.access(os.path.dirname(__file__), os.W_OK):
@@ -119,6 +120,8 @@ def get_active_engine():
                 print("[INFO] Connected to MySQL database via PyMySQL successfully.")
                 return _active_engine
             except Exception as e:
+                if REQUIRE_MYSQL:
+                    raise RuntimeError(f"MySQL not reachable and REQUIRE_MYSQL=1: {e}")
                 print(f"[WARN] MySQL not reachable ({e}). Falling back to SQLite local database.")
                 _active_engine = 'sqlite'
                 _init_sqlite_db()
@@ -138,6 +141,8 @@ def get_active_engine():
                 print("[INFO] Connected to MySQL database via mysql-connector successfully.")
                 return _active_engine
             except Exception as e:
+                if REQUIRE_MYSQL:
+                    raise RuntimeError(f"MySQL not reachable and REQUIRE_MYSQL=1: {e}")
                 print(f"[WARN] MySQL not reachable ({e}). Falling back to SQLite local database.")
                 _active_engine = 'sqlite'
                 _init_sqlite_db()
@@ -190,11 +195,17 @@ def get_db():
         finally:
             conn.close()
 
+def _cursor(conn, engine):
+    """mysql-connector needs dictionary=True; PyMySQL/SQLite already return dict-like rows."""
+    if engine == 'mysql' and not HAS_PYMYSQL:
+        return conn.cursor(dictionary=True)
+    return conn.cursor()
+
 def execute_query(sql, params=None, fetchone=False):
     """Executes a SELECT query and returns rows as list of dicts."""
     engine = get_active_engine()
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = _cursor(conn, engine)
         
         if engine == 'sqlite' and params:
             sql_adapted = sql.replace('%s', '?')
@@ -216,7 +227,7 @@ def execute_update(sql, params=None):
     """Executes an INSERT, UPDATE, or DELETE query and returns (lastrowid, rowcount)."""
     engine = get_active_engine()
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = _cursor(conn, engine)
         
         if engine == 'sqlite':
             sql_adapted = sql.replace('%s', '?') if params else sql
@@ -274,6 +285,10 @@ def _init_sqlite_db(force_reinit=False):
         Average_Rating REAL NOT NULL DEFAULT 5.00,
         Total_Reviews INTEGER NOT NULL DEFAULT 0,
         CO2_Saved_Kg REAL NOT NULL DEFAULT 0.00,
+        Aadhaar_Number TEXT DEFAULT NULL,
+        Aadhaar_Doc_Path TEXT DEFAULT NULL,
+        Is_Aadhaar_Verified INTEGER NOT NULL DEFAULT 0,
+        Verified_Gender TEXT DEFAULT NULL,
         Created_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 

@@ -37,6 +37,10 @@ CREATE TABLE USER (
     Average_Rating DECIMAL(3, 2) NOT NULL DEFAULT 5.00,
     Total_Reviews INT NOT NULL DEFAULT 0,
     CO2_Saved_Kg DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    Aadhaar_Number VARCHAR(20) NULL,
+    Aadhaar_Doc_Path VARCHAR(255) NULL,
+    Is_Aadhaar_Verified BOOLEAN NOT NULL DEFAULT FALSE,
+    Verified_Gender ENUM('Male', 'Female', 'Other') NULL,
     Created_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT chk_user_phone CHECK (LENGTH(Phone_Number) >= 8)
